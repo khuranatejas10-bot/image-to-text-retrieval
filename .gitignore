@@ -1,0 +1,26 @@
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints
+
+# Virtual environment
+venv/
+.venv/
+env/
+ENV/
+
+# Database files
+*.db
+*.sqlite3
+
+# Uploaded and intermediate files
+uploads/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Task and log files
+*.log

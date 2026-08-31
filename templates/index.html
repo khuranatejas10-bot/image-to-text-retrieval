@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robust Image Retrieval | OCR & Fuzzy Matching</title>
+    <!-- Modern Typography: Inter & Outfit -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Custom Style Sheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <!-- Background Elements for Glassmorphism Effect -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+
+    <div class="app-container">
+        <!-- Sidebar or Header Panel -->
+        <header class="main-header">
+            <div class="brand">
+                <div class="brand-logo">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>IMRetriever</h1>
+                    <span class="subtitle">OCR & Fuzzy Matching Engine</span>
+                </div>
+            </div>
+            <p class="description">
+                A lightweight and robust image search system based on Devishree Naidu et al. It applies geometric deskewing, line removal, and adaptive thresholding prior to deep OCR extraction, indexing matches in SQLite using Levenshtein fuzzy matching.
+            </p>
+        </header>
+
+        <!-- Main Dashboard Layout -->
+        <main class="dashboard-grid">
+            
+            <!-- Left Panel: Actions & Control -->
+            <section class="control-panel">
+                
+                <!-- Tab Controls -->
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="search-tab">
+                        <i class="fa-solid fa-magnifying-glass"></i> Search Index
+                    </button>
+                    <button class="tab-btn" data-tab="upload-tab">
+                        <i class="fa-solid fa-cloud-arrow-up"></i> Upload Images
+                    </button>
+                </div>
+
+                <!-- Search Panel Content -->
+                <div id="search-tab" class="tab-content active">
+                    <div class="card glass-card">
+                        <h3><i class="fa-solid fa-search"></i> Fuzzy Query</h3>
+                        <form id="search-form" onsubmit="handleSearch(event)">
+                            <div class="input-group">
+                                <label for="search-keyword">Search Keyword</label>
+                                <div class="input-with-icon">
+                                    <i class="fa-solid fa-keyboard"></i>
+                                    <input type="text" id="search-keyword" placeholder="Enter keyword (e.g. report, street)..." required autocomplete="off">
+                                </div>
+                            </div>
+                            
+                            <div class="slider-group">
+                                <div class="slider-header">
+                                    <label for="threshold-slider">Fuzzy Similarity Threshold</label>
+                                    <span id="threshold-value">80%</span>
+                                </div>
+                                <input type="range" id="threshold-slider" min="50" max="100" value="80" class="slider" oninput="updateThresholdLabel(this.value)">
+                                <span class="slider-hint">Higher values require closer character matches. Lower values tolerate OCR noise.</span>
+                            </div>
+
+                            <button type="submit" class="btn btn-primary btn-block">
+                                <i class="fa-solid fa-magnifying-glass"></i> Search Images
+                            </button>
+                            <button type="button" id="reset-search-btn" class="btn btn-secondary btn-block" onclick="resetSearch()" style="display: none;">
+                                <i class="fa-solid fa-rotate-left"></i> Clear Search Results
+                            </button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Upload Panel Content -->
+                <div id="upload-tab" class="tab-content">
+                    <div class="card glass-card">
+                        <h3><i class="fa-solid fa-cloud-arrow-up"></i> Batch Image Upload</h3>
+                        <div class="upload-dropzone" id="dropzone" onclick="triggerFileInput()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+                            <input type="file" id="file-input" multiple accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
+                            <div class="dropzone-content">
+                                <i class="fa-solid fa-images drop-icon"></i>
+                                <p class="drop-text">Drag & Drop images here, or <span>browse files</span></p>
+                                <p class="drop-subtext">Supports PNG, JPG, JPEG, WEBP, BMP up to 16MB</p>
+                            </div>
+                        </div>
+
+                        <!-- Upload Queue / Progress -->
+                        <div id="upload-queue" class="upload-queue" style="display: none;">
+                            <h4>Selected Files</h4>
+                            <div id="queue-items" class="queue-items"></div>
+                            <div class="queue-actions">
+                                <button class="btn btn-secondary" onclick="clearQueue()">Clear</button>
+                                <button class="btn btn-success" onclick="uploadQueue()">
+                                    <i class="fa-solid fa-circle-check"></i> Process & Index
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar -->
+                        <div id="progress-container" class="progress-container" style="display: none;">
+                            <div class="progress-header">
+                                <span id="progress-status">Uploading files...</span>
+                                <span id="progress-percent">0%</span>
+                            </div>
+                            <div class="progress-bar-bg">
+                                <div id="progress-bar-fill" class="progress-bar-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Stats / System Summary -->
+                <div class="card glass-card system-stats">
+                    <h3><i class="fa-solid fa-circle-info"></i> Pipeline Stages</h3>
+                    <ul class="stages-list">
+                        <li>
+                            <div class="stage-num">1</div>
+                            <div class="stage-desc">
+                                <strong>Deskewing</strong>
+                                <span>Geometric rotation to align skewed text lines.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="stage-num">2</div>
+                            <div class="stage-desc">
+                                <strong>Line Removal</strong>
+                                <span>Morphological operations to filter underlines/borders.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="stage-num">3</div>
+                            <div class="stage-desc">
+                                <strong>Adaptive Binarization</strong>
+                                <span>Gaussian local thresholding to maximize text clarity.</span>
+                            </div>
+                        </li>
+                        <li>
+                            <div class="stage-num">4</div>
+                            <div class="stage-desc">
+                                <strong>EasyOCR + Rule Correction</strong>
+                                <span>CRNN+CTC text extraction with rule-based correction.</span>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Right Panel: Results & Gallery -->
+            <section class="gallery-panel">
+                <div class="gallery-header">
+                    <h2 id="gallery-title">All Indexed Images</h2>
+                    <span id="gallery-count" class="badge">0 Images</span>
+                </div>
+
+                <!-- Gallery Loader -->
+                <div id="gallery-loader" class="loader-container" style="display: none;">
+                    <div class="spinner"></div>
+                    <p>Loading gallery items...</p>
+                </div>
+
+                <!-- Gallery Grid -->
+                <div id="gallery-grid" class="gallery-grid"></div>
+
+                <!-- Empty State -->
+                <div id="empty-state" class="empty-state">
+                    <i class="fa-solid fa-folder-open"></i>
+                    <p>No images indexed yet.</p>
+                    <span>Upload some documents or screenshots to start indexing!</span>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Image Details Modal -->
+    <div id="detail-modal" class="modal">
+        <div class="modal-backdrop" onclick="closeModal()"></div>
+        <div class="modal-content glass-card">
+            <button class="modal-close" onclick="closeModal()">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            
+            <div class="modal-body">
+                <!-- Left: Viewports -->
+                <div class="viewport-section">
+                    <div class="viewport-tabs">
+                        <button class="view-tab active" data-view="original-view">Original + Highlight</button>
+                        <button class="view-tab" data-view="preprocessed-view">Preprocessed (Gaussian)</button>
+                        <button class="view-tab" data-view="deskewed-view">Deskewed (Affine)</button>
+                        <button class="view-tab" data-view="nolines-view">Line Removed</button>
+                    </div>
+
+                    <!-- Original View with Canvas Overlay -->
+                    <div id="original-view" class="view-container active">
+                        <div class="image-overlay-wrapper">
+                            <img id="modal-img-original" src="" alt="Original">
+                            <canvas id="highlight-canvas"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Preprocessed Binary View -->
+                    <div id="preprocessed-view" class="view-container">
+                        <img id="modal-img-preprocessed" src="" alt="Preprocessed">
+                    </div>
+
+                    <!-- Deskewed View -->
+                    <div id="deskewed-view" class="view-container">
+                        <img id="modal-img-deskewed" src="" alt="Deskewed">
+                    </div>
+
+                    <!-- Line Removed View -->
+                    <div id="nolines-view" class="view-container">
+                        <img id="modal-img-nolines" src="" alt="No Lines">
+                    </div>
+                </div>
+
+                <!-- Right: Metadata & Text -->
+                <div class="metadata-section">
+                    <h2 id="modal-title">Image Details</h2>
+                    <span id="modal-hash" class="hash-badge">HASH: </span>
+                    
+                    <div class="meta-field">
+                        <strong>Original Filename</strong>
+                        <span id="modal-filename">-</span>
+                    </div>
+
+                    <div class="meta-field search-score-field" style="display: none;">
+                        <strong>Fuzzy Match Similarity Score</strong>
+                        <span id="modal-score" class="score-pill">-</span>
+                    </div>
+
+                    <div class="text-boxes">
+                        <div class="text-box-wrapper">
+                            <div class="text-box-header">
+                                <span>Raw Extracted Text</span>
+                                <i class="fa-solid fa-font"></i>
+                            </div>
+                            <div id="modal-raw-text" class="text-content"></div>
+                        </div>
+
+                        <div class="text-box-wrapper">
+                            <div class="text-box-header">
+                                <span>Corrected & Normalized Index</span>
+                                <i class="fa-solid fa-spell-check text-success-color"></i>
+                            </div>
+                            <div id="modal-corrected-text" class="text-content highlighted-text"></div>
+                        </div>
+                    </div>
+
+                    <div class="modal-actions">
+                        <button class="btn btn-danger" id="delete-btn" onclick="deleteActiveImage()">
+                            <i class="fa-solid fa-trash-can"></i> Delete Image from Index
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Container -->
+    <div id="notification-container" class="notification-container"></div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
