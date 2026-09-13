@@ -32,8 +32,14 @@ os.makedirs(os.path.join(app.root_path, 'static', 'js'), exist_ok=True)
 # Initialize database
 init_db()
 
-# Initialize EasyOCR extractor (keeps models loaded in memory)
-ocr_extractor = OCRExtractor()
+# Lazy initialization of EasyOCR extractor to ensure instant web server startup
+_ocr_extractor = None
+
+def get_ocr_extractor():
+    global _ocr_extractor
+    if _ocr_extractor is None:
+        _ocr_extractor = OCRExtractor()
+    return _ocr_extractor
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp', 'bmp', 'tiff', 'gif'}
 
@@ -131,7 +137,7 @@ def upload_images():
             cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], preprocessed_filename), preprocessed)
             
             # 5. OCR text extraction (Algorithm 4) and Correction (Algorithm 5)
-            full_text, ocr_segments = ocr_extractor.extract_text(preprocessed)
+            full_text, ocr_segments = get_ocr_extractor().extract_text(preprocessed)
             
             # 6. Save metadata to DB
             image_id = save_image_metadata(

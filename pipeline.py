@@ -148,7 +148,7 @@ class OCRExtractor:
     def __init__(self):
         # Initialize reader with English language
         # EasyOCR will automatically detect and download PyTorch and models if needed.
-        self.reader = easyocr.Reader(['en'], gpu=False) # Fallback to CPU by default
+        self.reader = easyocr.Reader(['en'], gpu=False, verbose=False) # Fallback to CPU by default
 
     def extract_text(self, processed_image):
         """
