@@ -163,6 +163,10 @@ function uploadQueue() {
         formData.append('files', file);
     });
     
+    const ocrDiffToggle = document.getElementById('ocr-diff-toggle');
+    const useOcrDiff = ocrDiffToggle ? ocrDiffToggle.checked : true;
+    formData.append('use_ocr_diff', useOcrDiff ? 'true' : 'false');
+    
     const progressContainer = document.getElementById('progress-container');
     const progressBarFill = document.getElementById('progress-bar-fill');
     const progressStatus = document.getElementById('progress-status');
@@ -183,7 +187,7 @@ function uploadQueue() {
             progressBarFill.style.width = `${percent}%`;
             progressPercent.innerText = `${percent}%`;
             if (percent === 100) {
-                progressStatus.innerText = 'EasyOCR extracting text & indexing (may take a few seconds)...';
+                progressStatus.innerText = 'OCR-Diff diffusion super-resolution & EasyOCR extracting text (may take a few seconds)...';
             }
         }
     };
@@ -412,6 +416,7 @@ function openModal(imageId) {
     
     // Set viewport images
     document.getElementById('modal-img-original').src = `/${baseImg.filepath}`;
+    document.getElementById('modal-img-ocrdiff').src = `/${base}_ocr_diff.${ext}`;
     document.getElementById('modal-img-preprocessed').src = `/${base}_preprocessed.${ext}`;
     document.getElementById('modal-img-deskewed').src = `/${base}_deskewed.${ext}`;
     document.getElementById('modal-img-nolines').src = `/${base}_nolines.${ext}`;

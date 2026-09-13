@@ -105,21 +105,27 @@ def upload_images():
                 })
                 continue
                 
+            # Retrieve OCR-Diff flag from request form (default True)
+            use_ocr_diff_str = request.form.get('use_ocr_diff', 'true')
+            use_ocr_diff = use_ocr_diff_str.lower() in ['true', '1', 'yes', 'on']
+
             # Rename temp file to permanent hash-based name to avoid collisions
             _, ext = os.path.splitext(original_filename)
             permanent_filename = f"{img_hash}{ext}"
             permanent_filepath = os.path.join(app.config['UPLOAD_FOLDER'], permanent_filename)
             os.rename(temp_path, permanent_filepath)
             
-            # 4. Preprocess image step-by-step (Algorithm 1)
-            # Returns binarized preprocessed, deskewed (Alg 2), and no_lines (Alg 3)
-            preprocessed, deskewed, no_lines = preprocess_image(permanent_filepath)
+            # 4. Preprocess image step-by-step (Algorithm 1 + OCR-Diff Super Resolution)
+            # Returns binarized preprocessed, deskewed (Alg 2), no_lines (Alg 3), and ocr_diff_enhanced
+            preprocessed, deskewed, no_lines, ocr_diff_enhanced = preprocess_image(permanent_filepath, use_ocr_diff=use_ocr_diff)
             
             # Save intermediate steps for UI visualization
+            ocr_diff_filename = f"{img_hash}_ocr_diff{ext}"
             deskewed_filename = f"{img_hash}_deskewed{ext}"
             no_lines_filename = f"{img_hash}_nolines{ext}"
             preprocessed_filename = f"{img_hash}_preprocessed{ext}"
             
+            cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], ocr_diff_filename), ocr_diff_enhanced)
             cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], deskewed_filename), deskewed)
             cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], no_lines_filename), no_lines)
             cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], preprocessed_filename), preprocessed)
@@ -138,6 +144,7 @@ def upload_images():
             )
             
             rel_path = os.path.relpath(permanent_filepath, app.root_path).replace('\\', '/')
+            ocr_diff_rel_path = f"uploads/{ocr_diff_filename}"
             
             results.append({
                 'id': image_id,
@@ -145,6 +152,7 @@ def upload_images():
                 'status': 'success',
                 'message': 'Processed successfully',
                 'filepath': rel_path,
+                'ocr_diff_path': ocr_diff_rel_path,
                 'hash': img_hash,
                 'raw_text': " ".join([seg['word'] for seg in ocr_segments]),
                 'corrected_text': full_text
@@ -161,6 +169,23 @@ def upload_images():
             })
             
     return jsonify({'results': results})
+
+@app.route('/api/ocr-diff/config', methods=['GET'])
+def ocr_diff_config():
+    """
+    Returns OCR-Diff model architecture & diffusion configuration parameters.
+    """
+    from ocr_diff import get_ocr_diff_pipeline
+    pipe = get_ocr_diff_pipeline()
+    return jsonify({
+        'framework': 'OCR-Diff (IEEE IoTJ 2024)',
+        'two_stage_training': True,
+        'linear_attention': True,
+        'diffusion_steps': pipe.T,
+        'time_embedding_dim_K': pipe.K,
+        'device': str(pipe.device),
+        'residual_learning': 'X_hat = X_hat_0 + x_up'
+    })
 
 @app.route('/search', methods=['POST'])
 def search_images():

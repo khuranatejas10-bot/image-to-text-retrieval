@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import easyocr
 import os
+from ocr_diff import get_ocr_diff_pipeline
 
 def deskew(image):
     """
@@ -81,28 +82,35 @@ def remove_lines(image):
         
     return cleaned
 
-def preprocess_image(image_path):
+def preprocess_image(image_path, use_ocr_diff=True):
     """
-    Algorithm 1: Image Preprocessing
-    Applies deskewing, line removal, and adaptive thresholding to an image.
+    Algorithm 1: Image Preprocessing with OCR-Diff Generative Diffusion Integration
+    Applies optional OCR-Diff super-resolution, deskewing, line removal, and adaptive thresholding.
     """
     image = cv2.imread(image_path)
     if image is None:
         raise ValueError(f"Could not read image from {image_path}")
         
-    # 4: image <- DESKEW(image)
-    deskewed = deskew(image)
+    # 1. OCR-Diff Generative Diffusion Super Resolution (IEEE IoTJ 2024 Paper)
+    if use_ocr_diff:
+        ocr_diff_pipe = get_ocr_diff_pipeline()
+        ocr_diff_enhanced = ocr_diff_pipe.enhance_image_np(image, num_steps=10)
+    else:
+        ocr_diff_enhanced = image.copy()
+        
+    # 2: image <- DESKEW(image)
+    deskewed = deskew(ocr_diff_enhanced)
     
-    # 5: image <- REMOVE_LINES(image)
+    # 3: image <- REMOVE_LINES(image)
     no_lines = remove_lines(deskewed)
     
-    # 6: gray <- convert image to grayscale
+    # 4: gray <- convert image to grayscale
     if len(no_lines.shape) == 3:
         gray = cv2.cvtColor(no_lines, cv2.COLOR_BGR2GRAY)
     else:
         gray = no_lines.copy()
         
-    # 7: return adaptive threshold of gray image using Gaussian method
+    # 5: return adaptive threshold of gray image using Gaussian method
     preprocessed = cv2.adaptiveThreshold(
         gray,
         255,
@@ -111,7 +119,7 @@ def preprocess_image(image_path):
         11,
         2
     )
-    return preprocessed, deskewed, no_lines
+    return preprocessed, deskewed, no_lines, ocr_diff_enhanced
 
 def correct_ocr_text(text):
     """

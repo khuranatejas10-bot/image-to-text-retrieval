@@ -121,5 +121,54 @@ class TestKeywordRetrievalPipeline(unittest.TestCase):
         matches_none = database.search_keywords_fuzzy('banana', threshold=80)
         self.assertEqual(len(matches_none), 0)
 
+class TestOCRDiffPipeline(unittest.TestCase):
+
+    def test_linear_attention_shape(self):
+        """
+        Verify LinearAttention module computes softmax along channels and preserves tensor shape (B x C x H x W).
+        """
+        import torch
+        from ocr_diff import LinearAttention
+        attn = LinearAttention(in_channels=32)
+        x = torch.randn(2, 32, 16, 16)
+        out = attn(x)
+        self.assertEqual(out.shape, x.shape)
+
+    def test_feature_extractor_shape(self):
+        """
+        Verify FeatureExtractor (5 residual blocks + skip connection) produces B x 3 x H x W features.
+        """
+        import torch
+        from ocr_diff import FeatureExtractor
+        fe = FeatureExtractor(in_channels=3, mid_channels=16)
+        x_up = torch.randn(2, 3, 32, 128)
+        x_f = fe(x_up)
+        self.assertEqual(x_f.shape, x_up.shape)
+
+    def test_unet_and_time_embedding(self):
+        """
+        Verify CustomizedConditionalUNet forward pass with sinusoidal time embedding tau_t in R^{2K}.
+        """
+        import torch
+        from ocr_diff import CustomizedConditionalUNet
+        unet = CustomizedConditionalUNet(K=64)
+        X_t = torch.randn(1, 3, 32, 128)
+        x_f = torch.randn(1, 3, 32, 128)
+        t = torch.tensor([50])
+        pred_noise = unet(X_t, x_f, t)
+        self.assertEqual(pred_noise.shape, X_t.shape)
+
+    def test_ocr_diff_enhancement_numpy(self):
+        """
+        Verify high-level enhance_image_np method accepts NumPy images and outputs enhanced image array.
+        """
+        from ocr_diff import OCRDiffPipeline
+        pipe = OCRDiffPipeline(T=20)
+        img = np.ones((32, 128, 3), dtype=np.uint8) * 200
+        enhanced = pipe.enhance_image_np(img, num_steps=5)
+        self.assertEqual(enhanced.shape, img.shape)
+        self.assertEqual(enhanced.dtype, np.uint8)
+
 if __name__ == '__main__':
     unittest.main()
+

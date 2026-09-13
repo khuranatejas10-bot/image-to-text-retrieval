@@ -87,6 +87,7 @@
                 <div id="upload-tab" class="tab-content">
                     <div class="card glass-card">
                         <h3><i class="fa-solid fa-cloud-arrow-up"></i> Batch Image Upload</h3>
+                        <!-- Upload Dropzone -->
                         <div class="upload-dropzone" id="dropzone" onclick="triggerFileInput()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
                             <input type="file" id="file-input" multiple accept="image/*" style="display: none;" onchange="handleFileSelect(event)">
                             <div class="dropzone-content">
@@ -94,6 +95,14 @@
                                 <p class="drop-text">Drag & Drop images here, or <span>browse files</span></p>
                                 <p class="drop-subtext">Supports PNG, JPG, JPEG, WEBP, BMP up to 16MB</p>
                             </div>
+                        </div>
+
+                        <!-- OCR-Diff Feature Toggle -->
+                        <div class="checkbox-group" style="margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 0.9rem; background: rgba(255, 255, 255, 0.04); padding: 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.08);">
+                            <input type="checkbox" id="ocr-diff-toggle" checked style="width: 18px; height: 18px; accent-color: var(--primary-color); cursor: pointer;">
+                            <label for="ocr-diff-toggle" style="cursor: pointer; color: var(--text-color);">
+                                <strong style="color: #60a5fa;"><i class="fa-solid fa-atom"></i> Enable OCR-Diff Diffusion</strong> (IEEE IoTJ 2024 Generative Super-Resolution)
+                            </label>
                         </div>
 
                         <!-- Upload Queue / Progress -->
@@ -125,6 +134,13 @@
                 <div class="card glass-card system-stats">
                     <h3><i class="fa-solid fa-circle-info"></i> Pipeline Stages</h3>
                     <ul class="stages-list">
+                        <li>
+                            <div class="stage-num" style="background: linear-gradient(135deg, #3b82f6, #8b5cf6);">0</div>
+                            <div class="stage-desc">
+                                <strong>OCR-Diff Generative Diffusion</strong>
+                                <span>Two-stage U-Net diffusion model for low-resolution text restoration.</span>
+                            </div>
+                        </li>
                         <li>
                             <div class="stage-num">1</div>
                             <div class="stage-desc">
@@ -196,6 +212,7 @@
                 <div class="viewport-section">
                     <div class="viewport-tabs">
                         <button class="view-tab active" data-view="original-view">Original + Highlight</button>
+                        <button class="view-tab" data-view="ocrdiff-view">OCR-Diff (Diffusion SR)</button>
                         <button class="view-tab" data-view="preprocessed-view">Preprocessed (Gaussian)</button>
                         <button class="view-tab" data-view="deskewed-view">Deskewed (Affine)</button>
                         <button class="view-tab" data-view="nolines-view">Line Removed</button>
@@ -207,6 +224,11 @@
                             <img id="modal-img-original" src="" alt="Original">
                             <canvas id="highlight-canvas"></canvas>
                         </div>
+                    </div>
+
+                    <!-- OCR-Diff View -->
+                    <div id="ocrdiff-view" class="view-container">
+                        <img id="modal-img-ocrdiff" src="" alt="OCR-Diff Diffusion SR">
                     </div>
 
                     <!-- Preprocessed Binary View -->
