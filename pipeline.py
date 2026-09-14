@@ -82,7 +82,7 @@ def remove_lines(image):
         
     return cleaned
 
-def preprocess_image(image_path, use_ocr_diff=True):
+def preprocess_image(image_path, use_ocr_diff=False):
     """
     Algorithm 1: Image Preprocessing with OCR-Diff Generative Diffusion Integration
     Applies optional OCR-Diff super-resolution, deskewing, line removal, and adaptive thresholding.
@@ -91,10 +91,10 @@ def preprocess_image(image_path, use_ocr_diff=True):
     if image is None:
         raise ValueError(f"Could not read image from {image_path}")
         
-    # 1. OCR-Diff Generative Diffusion Super Resolution (IEEE IoTJ 2024 Paper)
+    # 1. OCR-Diff Generative Diffusion Super Resolution (Fast 1-step sampling if enabled)
     if use_ocr_diff:
         ocr_diff_pipe = get_ocr_diff_pipeline()
-        ocr_diff_enhanced = ocr_diff_pipe.enhance_image_np(image, num_steps=10)
+        ocr_diff_enhanced = ocr_diff_pipe.enhance_image_np(image, num_steps=1)
     else:
         ocr_diff_enhanced = image.copy()
         

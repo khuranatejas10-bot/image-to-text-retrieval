@@ -111,15 +111,21 @@ def upload_images():
                 })
                 continue
                 
-            # Retrieve OCR-Diff flag from request form (default True)
-            use_ocr_diff_str = request.form.get('use_ocr_diff', 'true')
+            # Retrieve OCR-Diff flag from request form (default False for instant web response)
+            use_ocr_diff_str = request.form.get('use_ocr_diff', 'false')
             use_ocr_diff = use_ocr_diff_str.lower() in ['true', '1', 'yes', 'on']
 
-            # Rename temp file to permanent hash-based name to avoid collisions
+            # Rename/replace temp file to permanent hash-based name to avoid collisions
             _, ext = os.path.splitext(original_filename)
             permanent_filename = f"{img_hash}{ext}"
             permanent_filepath = os.path.join(app.config['UPLOAD_FOLDER'], permanent_filename)
-            os.rename(temp_path, permanent_filepath)
+            if os.path.exists(permanent_filepath):
+                try:
+                    os.remove(permanent_filepath)
+                except Exception:
+                    pass
+            if os.path.exists(temp_path):
+                os.replace(temp_path, permanent_filepath)
             
             # 4. Preprocess image step-by-step (Algorithm 1 + OCR-Diff Super Resolution)
             # Returns binarized preprocessed, deskewed (Alg 2), no_lines (Alg 3), and ocr_diff_enhanced
@@ -249,4 +255,4 @@ def serve_upload(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=False)

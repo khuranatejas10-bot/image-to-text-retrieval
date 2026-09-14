@@ -163,10 +163,6 @@ function uploadQueue() {
         formData.append('files', file);
     });
     
-    const ocrDiffToggle = document.getElementById('ocr-diff-toggle');
-    const useOcrDiff = ocrDiffToggle ? ocrDiffToggle.checked : true;
-    formData.append('use_ocr_diff', useOcrDiff ? 'true' : 'false');
-    
     const progressContainer = document.getElementById('progress-container');
     const progressBarFill = document.getElementById('progress-bar-fill');
     const progressStatus = document.getElementById('progress-status');
@@ -187,7 +183,7 @@ function uploadQueue() {
             progressBarFill.style.width = `${percent}%`;
             progressPercent.innerText = `${percent}%`;
             if (percent === 100) {
-                progressStatus.innerText = 'OCR-Diff diffusion super-resolution & EasyOCR extracting text (may take a few seconds)...';
+                progressStatus.innerText = 'Processing image & extracting text...';
             }
         }
     };
