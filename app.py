@@ -199,6 +199,102 @@ def ocr_diff_config():
         'residual_learning': 'X_hat = X_hat_0 + x_up'
     })
 
+@app.route('/api/unified-ocr', methods=['POST'])
+def unified_ocr_endpoint():
+    """
+    Unified Page-Level OCR & Diffusion API (IEEE IoTJ 2024 & IEEE Access 2025).
+    Performs 4-tensor extraction, Delaunay block segmentation, curvilinear polynomial lines,
+    reading order sorting, and OCR-Diff generative diffusion super-resolution.
+    """
+    if 'file' not in request.files and 'files' not in request.files:
+        return jsonify({'error': 'No file part in the request'}), 400
+
+    file = request.files.get('file') or (request.files.getlist('files')[0] if request.files.getlist('files') else None)
+    if not file or file.filename == '':
+        return jsonify({'error': 'No selected file'}), 400
+
+    try:
+        from unified_ocr import get_unified_ocr_engine
+        from page_ocr import render_four_tensor_vis
+
+        original_filename = secure_filename(file.filename)
+        temp_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_u_{original_filename}")
+        file.save(temp_path)
+
+        img_hash = calculate_sha256(temp_path)
+        _, ext = os.path.splitext(original_filename)
+        permanent_filepath = os.path.join(app.config['UPLOAD_FOLDER'], f"{img_hash}{ext}")
+
+        if os.path.exists(permanent_filepath):
+            try:
+                os.remove(permanent_filepath)
+            except Exception:
+                pass
+        os.replace(temp_path, permanent_filepath)
+
+        # Retrieve form options
+        use_ocr_diff = request.form.get('use_ocr_diff', 'true').lower() in ['true', '1', 'yes', 'on']
+        steps = int(request.form.get('steps', 1))
+        thresh = float(request.form.get('thresh', 0.15))
+        apply_wordninja = request.form.get('apply_wordninja', 'true').lower() in ['true', '1', 'yes', 'on']
+        gt_text = request.form.get('gt_text', '').strip() or None
+
+        engine = get_unified_ocr_engine()
+        results = engine.process_document(
+            image_path_or_np=permanent_filepath,
+            use_ocr_diff=use_ocr_diff,
+            ocr_diff_steps=steps,
+            confidence_thresh=thresh,
+            apply_wordninja=apply_wordninja,
+            gt_text=gt_text
+        )
+
+        # Save visualization overlays
+        vis_filename = f"{img_hash}_unified_vis.png"
+        vis_path = os.path.join(app.config['UPLOAD_FOLDER'], vis_filename)
+        cv2.imwrite(vis_path, results['visualization_image'])
+
+        # Save 4-Tensor heatmaps visualization
+        maps_filename = f"{img_hash}_4tensors.png"
+        maps_path = os.path.join(app.config['UPLOAD_FOLDER'], maps_filename)
+        tensor_vis = render_four_tensor_vis(results['maps'])
+        cv2.imwrite(maps_path, tensor_vis)
+
+        # Process diffusion example crops for UI
+        diff_examples_web = []
+        for idx, ex in enumerate(results.get('diffusion_examples', [])):
+            orig_crop_name = f"{img_hash}_crop_orig_{idx}.png"
+            enh_crop_name = f"{img_hash}_crop_enh_{idx}.png"
+            cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], orig_crop_name), ex['original'])
+            cv2.imwrite(os.path.join(app.config['UPLOAD_FOLDER'], enh_crop_name), ex['enhanced'])
+            diff_examples_web.append({
+                'line_id': ex['line_id'],
+                'orig_url': f"uploads/{orig_crop_name}",
+                'enh_url': f"uploads/{enh_crop_name}"
+            })
+
+        rel_orig = os.path.relpath(permanent_filepath, app.root_path).replace('\\', '/')
+        rel_vis = f"uploads/{vis_filename}"
+        rel_maps = f"uploads/{maps_filename}"
+
+        return jsonify({
+            'status': 'success',
+            'full_text': results['full_text'],
+            'blocks': results['blocks'],
+            'stats': results['stats'],
+            'metrics': results['metrics'],
+            'image_url': rel_orig,
+            'vis_url': rel_vis,
+            'maps_url': rel_maps,
+            'diff_examples': diff_examples_web
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @app.route('/search', methods=['POST'])
 def search_images():
     """

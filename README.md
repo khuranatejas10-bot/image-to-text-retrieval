@@ -1,177 +1,201 @@
-# Keyword-Based Image Retrieval System with OCR-Diff Super-Resolution
+# Page-Level OCR-Diff: Unified Generative Diffusion & Document Layout Framework
 
-A lightweight, robust, and highly efficient system for keyword-based image retrieval utilizing **OCR-Diff Generative Diffusion Super-Resolution**, OpenCV-based image preprocessing, deep-learning-based OCR (EasyOCR), rule-based post-correction, and Levenshtein-distance fuzzy string matching.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![IEEE IoTJ 2024](https://img.shields.io/badge/IEEE%20IoTJ-2024-green.svg)](https://doi.org/10.1109/JIOT.2024.3390700)
+[![IEEE Access 2025](https://img.shields.io/badge/IEEE%20Access-2025-green.svg)](https://doi.org/10.1109/ACCESS.2025.3572001)
 
-This project integrates the system architecture described in:
-1. **"OCR-Diff: A Two-Stage Deep Learning Framework for Optical Character Recognition Using Diffusion Model in Industrial Internet of Things"** by Chae-Won Park, Vikas Palakonda, Sangseok Yun, Il-Min Kim, and Jae-Mo Kang (*IEEE Internet of Things Journal*, Vol. 11, No. 15, August 2024).
-2. **"A Lightweight and Robust System for Keyword-Based Image Retrieval Using OCR and Fuzzy Matching"** by Devishree Naidu, Siddhi Kothekar, Mrunal Labhe, and Adiba Ali (2026).
+A state-of-the-art Optical Character Recognition (OCR) and layout reconstruction framework combining two cutting-edge research paradigms:
 
----
-
-## 🌟 Key Features
-
-*   **OCR-Diff Generative Diffusion Super-Resolution:** Implements a PyTorch-backed two-stage diffusion framework with customized Conditional U-Net, Linear Attention, and Feature Extractor for text image super-resolution ($\hat{X} = \hat{X}_0 + x_{up}$).
-*   **Geometric Deskewing (Algorithm 2):** Automatically estimates text orientation using minimum-area bounding rectangles and rotates images via affine transformation.
-*   **Horizontal Line Removal (Algorithm 3):** Uses morphological operations (horizontal kernels, erosion, and dilation) to remove underlines, rulings, or borders without damaging text details.
-*   **Adaptive Binarization (Algorithm 1):** Applies Gaussian adaptive thresholding to maximize text-to-background contrast under uneven lighting conditions.
-*   **Deep Learning OCR (Algorithm 4):** Integrates EasyOCR (built on CRNN + CTC loss) for accurate multilingual word-level bounding box and text extraction.
-*   **Rule-Based Post-Correction (Algorithm 5):** Fixes common OCR confusion errors (e.g., mistaken substitutions like `l`, `i`, `—` for `1` or `o`, `O` for `0`).
-*   **SHA-256 Deduplication (Algorithm 6):** Computes unique binary hashes for uploaded files, skipping reprocessing of identical documents to save up to 30% computing time.
-*   **Fuzzy Keyword Search (Algorithm 7):** Performs word-level tokenization and uses Levenshtein-distance partial matching to retrieve images, effectively handling spelling variations and OCR noise.
-*   **Interactive Visual Dashboard:** A high-end dark-mode frontend featuring drag-and-drop batch uploads, OCR-Diff toggle switches, step-by-step visual inspectors for preprocessing stages (OCR-Diff, Deskewed, Line Removed, Binarized), and dynamic canvas bounding box overlays highlighting matched keywords.
+1. **OCR-Diff (IEEE Internet of Things Journal, 2024)**:  
+   *“OCR-Diff: A Two-Stage Deep Learning Framework for Optical Character Recognition Using Diffusion Model in Industrial Internet of Things”*  
+   *(Chae-Won Park, Vikas Palakonda, Sangseok Yun, Il-Min Kim, and Jae-Mo Kang)*
+2. **Page-Level Document Recognition (IEEE Access, 2025)**:  
+   *“Development of OCR Service for Page-Level Recognition for Camera-Captured Document Images”*  
+   *(Junyoung Park, Wonjun Kang, Seonji Park, Keuntek Lee, Hyung Il Koo, and Nam Ik Cho)*
 
 ---
 
-## 🔬 Mathematical Formulation of OCR-Diff
+## 🌟 Key Architecture & Contributions
 
-### 1. Stage 1: Forward Diffusion & Noise Estimation Pretraining
-Given ground truth HR text image $X$, upsampled LR text image $x_{up}$, and time step $t$:
-$$X_t = \sqrt{\bar{\alpha}_t} X + \sqrt{1 - \bar{\alpha}_t} E, \quad E \sim \mathcal{N}(0, \mathbf{I})$$
-Features are extracted via $x_f = f_\phi(x_{up})$ (5 residual blocks with skip connection).
-Pretraining loss minimizes mean squared error:
-$$\mathcal{L}_{pre} = \| E - E_\theta(X_t, x_f, \tau_t) \|^2$$
+```
+                    [Camera-Captured / Low-Resolution / Warped Document]
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │       FourTensorNet (IEEE Access 2025 Backbone)       │
+                 │   Outputs: Affinity (A), Region (R),                   │
+                 │            Orientation (32 Bins), Scale (10 Bins)      │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                                             ▼
+                        [Connected Component (CC) Extraction]
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │        Text-Block Segmentation via Delaunay Graph      │
+                 │   Pruning condition: d_pq >= eps * min(s_p, s_q)       │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │        Curvilinear Polynomial Text-Line Detection      │
+                 │   k <= 4 polynomial fitting: RMSE <= s_bar / 4         │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │         Topological Reading Order Resolution           │
+                 │   Intra-line: x' sort | Inter-line: f_i(x_avg) sort    │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │          OCR-Diff Enhancement (IEEE IoTJ 2024)         │
+                 │   Conditional U-Net with Linear Attention O(N)         │
+                 │   Reverse Diffusion Residual Learning: X_hat = X_0 + x │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                                             ▼
+                 ┌────────────────────────────────────────────────────────┐
+                 │        Recognition & Linguistic Post-Processing        │
+                 │   - CTC / Attention Recognition                        │
+                 │   - WordNinja unigram frequency word splitting         │
+                 │   - Bleed-through confidence threshold rejection       │
+                 └───────────────────────────┬────────────────────────────┘
+                                             │
+                                             ▼
+                    [LLM-Ready Reading Order Text, Markdown & JSON]
+```
 
-Where time embedding $\tau_t \in \mathbb{R}^{2K}$ ($K=64$) is computed via:
-$$\tau_t = \left[ \left\{ \sin\left(\frac{t}{10000^{k/(K-1)}}\right) \right\}_{k=1}^K, \left\{ \cos\left(\frac{t}{10000^{k/(K-1)}}\right) \right\}_{k=1}^K \right]$$
+### 1. OCR-Diff: Generative Diffusion Text Super-Resolution
+- **Feature Extractor**: 5 stacked residual blocks with global skip connection yielding text representation $x_f \in \mathbb{R}^{W \times H \times D}$.
+- **Customized Conditional U-Net**:
+  - Incorporates **Linear Attention** ($O(N)$ spatial complexity) at the bottleneck to capture long-range stroke dependencies.
+  - Time embedding vector $\tau_t \in \mathbb{R}^{2K}$ ($K=64$) through a 2-layer MLP.
+  - Forward corruption with cosine beta schedule: $X_t = \sqrt{\bar{\alpha}_t}X + \sqrt{1 - \bar{\alpha}_t}E$.
+  - Reverse sampling residual learning: $\hat{X} = \hat{X}_0 + x_{up}$.
+  - Two-stage training: MSE pre-training loss $\to$ Recognizer-guided fine-tuning loss.
 
-### 2. Linear Attention Mechanism
-In the middle bottleneck layer of the U-Net, Linear Attention computes:
-$$Q_{softmax} = \text{Softmax}(Q), \quad K_{softmax} = \text{Softmax}(K)$$
-$$\text{Context} = K_{softmax}^T V, \quad \text{Output} = \gamma (\text{Context} \cdot Q_{softmax}) + X$$
-This reduces computational complexity from $\mathcal{O}(N^2)$ to $\mathcal{O}(N)$.
-
-### 3. Stage 2: Reverse Diffusion & Fine-Tuning
-Reverse diffusion iteratively reconstructs residual image $\hat{X}_0$:
-$$\hat{X}_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left( \hat{X}_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} E_\theta(\hat{X}_t, x_f, \tau_t) \right) + \sigma_t Z$$
-HR text image is reconstructed via residual addition:
-$$\hat{X} = \hat{X}_0 + x_{up}$$
-Fine-tuning loss combines MSE and frozen recognizer cross-entropy:
-$$\mathcal{L}_{fine} = \| X - \hat{X} \|^2 - \lambda \sum_{i=1}^N \omega_i \langle y_i, \log \hat{y}_i \rangle$$
+### 2. Page-Level Recognition for Camera-Captured Images
+- **4-Tensor Deep Network**: Predicts Region score ($R$), Affinity score ($A$), 32-bin Orientation ($O$), and 10-bin Scale ($S$).
+- **Combined Loss**:
+  $$\mathcal{L} = \mathcal{L}_r + \mathcal{L}_a + \lambda_s \mathcal{L}_s + \lambda_o \mathcal{L}_o$$
+  with $\lambda_s = 0.1, \lambda_o = 0.3$.
+- **Delaunay Triangulation Block Segmentation**:
+  $$d_{pq} \ge \epsilon \times \min(s_p, s_q) \quad (\epsilon = 2)$$
+- **Curvilinear Polynomial Text-Line Fitting**:
+  $$\sqrt{\min_f \frac{1}{|T|} \sum_{c_p \in T} (y'_p - f(x'_p))^2} \le \frac{\bar{s}}{4}$$
+- **Topological Reading Order**: Evaluates polynomial height at block center $x^i_{avg} = \frac{1}{|C_i|} \sum x'_p$, sorting lines by $f_i(x^i_{avg})$.
+- **WordNinja Post-Processing & Bleed-Through Rejection**: Corrects glued words and discards reverse-side ghost print.
+- **TBR-L (Text-Block ROUGE-L) Metric**:
+  $$\text{TBR-L} = \max_{\pi \in \mathcal{P}} \frac{\text{LCS}(F, \pi(B_1, \dots, B_n))}{|\pi(B_1, \dots, B_n)|}$$
 
 ---
 
-## 🛠️ Technology Stack
+## 🚀 Quick Start
 
-*   **Backend:** Python 3, Flask (Web Framework)
-*   **Deep Learning & Super-Resolution:** PyTorch, torchvision, OCR-Diff Pipeline
-*   **Image Processing:** OpenCV, NumPy
-*   **Optical Character Recognition:** EasyOCR (PyTorch-backed)
-*   **Fuzzy Matching Engine:** RapidFuzz (C-optimized Levenshtein calculations)
-*   **Database:** SQLite 3
+### Installation
+
+```bash
+git clone https://github.com/khuranatejas10-bot/page-level-ocr-diff.git
+cd page-level-ocr-diff
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### CLI Document Extraction
+
+Extract structured text from any camera-captured image, receipt, or book page:
+
+```bash
+# Basic extraction with reading order preserved
+python cli.py --image path/to/document.jpg --output results.json --save-vis vis.jpg
+
+# Enable high-fidelity diffusion super-resolution (e.g. 5 steps)
+python cli.py --image path/to/document.jpg --steps 5 --save-vis vis.jpg
+
+# Evaluate with Ground-Truth text for TBR-L, CER, and Edit Distance
+python cli.py --image path/to/document.jpg --gt ground_truth.txt
+```
+
+### Interactive Web Dashboard
+
+Launch the Flask web server with real-time 4-tensor visualization, Delaunay layout graphs, and diffusion before/after comparisons:
+
+```bash
+python app.py
+```
+Open [http://localhost:5000](http://localhost:5000) in your browser.
+
+---
+
+## 🧪 Verification & Test Suite
+
+Run the complete unit and mathematical verification test suite:
+
+```bash
+python test_unified_system.py
+```
+
+All 10 unit tests verify:
+- Cosine schedule, forward diffusion corruption, and reverse residual sampling.
+- Linear attention $O(N)$ projection invariance.
+- 4-tensor network forward pass and masked cross-entropy loss.
+- Delaunay triangulation scale-adaptive edge pruning.
+- Curvilinear 4th-order polynomial line fitting and topological reading order sorting.
+- WordNinja splitting and bleed-through rejection thresholding.
+- Levenshtein Edit Distance, CER, and Text-Block ROUGE-L (TBR-L) calculations.
 
 ---
 
 ## 📁 Repository Structure
 
-```text
-image-to-text-retrieval/
-│
-├── static/
-│   ├── css/
-│   │   └── styles.css          # Premium Dark-Mode Glassmorphism Styling
-│   └── js/
-│       └── main.js            # Drag & drop upload, OCR-Diff toggle, canvas drawing, search, and viewports logic
-│
-├── templates/
-│   └── index.html             # Main Frontend Dashboard UI Template with OCR-Diff Inspector
-│
-├── uploads/                   # Folder holding original and processed pipeline stage images
-│
-├── app.py                     # Flask Server containing REST API Endpoints & OCR-Diff status API
-├── ocr_diff.py                # PyTorch OCR-Diff (Linear Attention, Conditional U-Net, Feature Extractor, Diffusion Sampler)
-├── database.py                # Database connection, schemas, hashing, and search matching
-├── pipeline.py                # OpenCV Preprocessing, OCR-Diff Integration, and EasyOCR
-├── requirements.txt           # Python Project Dependencies
-├── test_pipeline.py           # Automated unit tests covering OCR-Diff, pipeline, and database functions
-└── README.md                  # Comprehensive Project Documentation
+```
+├── ocr_diff.py              # IEEE IoTJ 2024: OCR-Diff Conditional U-Net, Linear Attention & Diffusion
+├── page_ocr.py              # IEEE Access 2025: 4-Tensor Net, Delaunay Triangulation, Curvilinear Lines
+├── metrics.py               # TBR-L, Character Error Rate (CER), Levenshtein Edit Distance
+├── unified_ocr.py           # Unified Master Engine integrating both research frameworks
+├── cli.py                   # Command-line interface with JSON/Vis export & metrics
+├── app.py                   # Web dashboard & REST API server
+├── test_unified_system.py   # Unit test suite verifying mathematical formulations
+├── templates/               # Web application templates
+├── static/                  # Styles, scripts, and UI assets
+└── requirements.txt         # Project dependencies
 ```
 
 ---
 
-## 🚀 Getting Started
+## 📖 Citation
 
-### 📋 Prerequisites
+If you use this codebase or methodology, please cite the underlying research papers:
 
-*   Python 3.8 or higher installed on your system.
-*   GPU acceleration (CUDA) is optional but supported for faster OCR-Diff diffusion sampling and EasyOCR text extraction. The engine falls back automatically to standard CPU execution.
+```bibtex
+@article{park2024ocrdiff,
+  title={OCR-Diff: A Two-Stage Deep Learning Framework for Optical Character Recognition Using Diffusion Model in Industrial Internet of Things},
+  author={Park, Chae-Won and Palakonda, Vikas and Yun, Sangseok and Kim, Il-Min and Kang, Jae-Mo},
+  journal={IEEE Internet of Things Journal},
+  volume={11},
+  number={15},
+  pages={25997--26000},
+  year={2024},
+  publisher={IEEE}
+}
 
-### 🔧 Installation
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/khuranatejas10-bot/image-to-text-retrieval.git
-    cd image-to-text-retrieval
-    ```
-
-2.  **Create and activate a virtual environment:**
-    ```bash
-    python -m venv venv
-    
-    # Windows Command Prompt:
-    venv\Scripts\activate
-    
-    # Git Bash / Linux / macOS:
-    source venv/bin/activate
-    
-    # PowerShell:
-    venv\Scripts\Activate.ps1
-    ```
-
-3.  **Install dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
----
-
-## 🖥️ Running the Application
-
-1.  **Start the Flask development server:**
-    ```bash
-    python app.py
-    ```
-
-2.  **Access the web portal:**
-    Open your browser and navigate to:
-    ```text
-    http://localhost:5000
-    ```
-
-3.  **Basic Workflow:**
-    *   Go to **Upload Images** and drag and drop document scans, signs, or low-resolution labels.
-    *   Toggle **Enable OCR-Diff Diffusion** to enable generative super-resolution text restoration.
-    *   Switch to **Search Index**, input a search term (e.g. "report"), select a fuzzy threshold, and press Enter.
-    *   Click on any search card to open the detail modal and view preprocessed steps side-by-side (OCR-Diff SR, Deskewed, Line Removed, Gaussian Binary) or inspect the keyword highlight overlay!
-
----
-
-## 🧪 Running Unit Tests
-
-Automated tests check OCR-Diff PyTorch modules (Linear Attention, Feature Extractor, U-Net, Diffusion Sampler), binarization, line removal, database metadata saving, SHA-256 cache hits, and Levenshtein fuzzy searches.
-
-Run unit tests via the standard Python unittest runner:
-```bash
-python -m unittest test_pipeline.py
+@article{park2025pagelevel,
+  title={Development of OCR Service for Page-Level Recognition for Camera-Captured Document Images},
+  author={Park, Junyoung and Kang, Wonjun and Park, Seonji and Lee, Keuntek and Koo, Hyung Il and Cho, Nam Ik},
+  journal={IEEE Access},
+  volume={13},
+  pages={91263--91275},
+  year={2025},
+  publisher={IEEE}
+}
 ```
 
 ---
 
-## 📖 Citation & References
-
-This implementation is modeled after the algorithms, architectures, and experiments documented in:
-
-> Chae-Won Park, Vikas Palakonda, Sangseok Yun, Il-Min Kim, Jae-Mo Kang. **"OCR-Diff: A Two-Stage Deep Learning Framework for Optical Character Recognition Using Diffusion Model in Industrial Internet of Things"**. *IEEE Internet of Things Journal*, Vol. 11, No. 15, pp. 25997–26000, 1 August 2024.
-
-> Devishree Naidu, Siddhi Kothekar, Mrunal Labhe, Adiba Ali. **"A Lightweight and Robust System for Keyword-Based Image Retrieval Using OCR and Fuzzy Matching"**. *International Conference on Emerging Trends and Innovations in ICT (ICEI)*, 2026.
-
-Key algorithms adapted:
-1.  **OCR-Diff Diffusion Model:** Two-stage residual diffusion model for text image super-resolution ($\hat{X} = \hat{X}_0 + x_{up}$).
-2.  **Linear Attention Module:** $\mathcal{O}(N)$ complexity attention mechanism embedded in U-Net bottleneck.
-3.  **Algorithm 1:** Image Preprocessing (Adaptive Thresholding)
-4.  **Algorithm 2:** Deskewing Algorithm (Affine text line rotation)
-5.  **Algorithm 3:** Line Removal (Horizontal structuring element morphology)
-6.  **Algorithm 4:** OCR using EasyOCR (CRNN + CTC neural architecture)
-7.  **Algorithm 5:** OCR Error Correction (Rule-based normalization dictionary)
-8.  **Algorithm 6:** SHA-256 Hash for Image Deduplication (Binary file hashing)
-9.  **Algorithm 7:** Keyword Search with Fuzzy Matching (Partial Levenshtein ratio matching)
-
+## 📄 License
+This project is open-source under the MIT License.

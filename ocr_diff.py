@@ -347,9 +347,11 @@ class OCRDiffPipeline:
 
         orig_h, orig_w = img_rgb.shape[:2]
 
-        # Upsample to target diffusion resolution (128 x 32 or proportional)
-        target_w = max(128, (orig_w // 8) * 8)
-        target_h = max(32, (orig_h // 8) * 8)
+        # Cap target diffusion dimensions per OCR-Diff paper (128 x 32 canonical text patch, max 256 x 64)
+        aspect = orig_w / float(max(1, orig_h))
+        target_h = 32
+        target_w = int(round(target_h * aspect))
+        target_w = max(64, min(256, (target_w // 8) * 8))
 
         resized = cv2.resize(img_rgb, (target_w, target_h), interpolation=cv2.INTER_CUBIC)
 
