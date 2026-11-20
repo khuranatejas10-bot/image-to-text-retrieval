@@ -21,10 +21,10 @@ detector:
   max_iterations: 200
   batch_size: 4
   image_size: 256
-  region_threshold: 0.4
-  affinity_threshold: 0.4
-  min_component_area: 10
-  min_component_score: 0.3
+  region_threshold: 0.25
+  affinity_threshold: 0.20
+  min_component_area: 8
+  min_component_score: 0.25
   delaunay_epsilon: 2.0
   max_poly_degree: 4
   line_deviation_scale_factor: 0.25

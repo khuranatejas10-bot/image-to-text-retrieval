@@ -25,8 +25,8 @@ class TextComponent:
 
 def extract_components(region_map: np.ndarray, affinity_map: np.ndarray,
                        orientation_logits: np.ndarray, scale_logits: np.ndarray,
-                       region_thresh: float = 0.4, affinity_thresh: float = 0.4,
-                       min_area: int = 10, min_score: float = 0.3,
+                       region_thresh: float = 0.30, affinity_thresh: float = 0.15,
+                       min_area: int = 8, min_score: float = 0.20,
                        num_orient_bins: int = 32, num_scale_bins: int = 10,
                        scale_bin_edges: Optional[List[float]] = None,
                        stride: int = 2) -> List[TextComponent]:
@@ -47,9 +47,8 @@ def extract_components(region_map: np.ndarray, affinity_map: np.ndarray,
     Returns:
         List of TextComponent objects.
     """
-    # Combine region and affinity for connected component analysis
-    combined = np.maximum(region_map, affinity_map)
-    binary = (combined > min(region_thresh, affinity_thresh)).astype(np.uint8) * 255
+    # Combine region and affinity heatmaps (CRAFT formulation)
+    binary = ((region_map >= region_thresh) | (affinity_map >= affinity_thresh)).astype(np.uint8) * 255
 
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(
         binary, connectivity=8
@@ -76,9 +75,10 @@ def extract_components(region_map: np.ndarray, affinity_map: np.ndarray,
 
         cc_mask = (labels == label_id)
 
-        # Average region score within CC
+        # Robust score: max region score within CC (checks character presence)
+        max_score = float(region_map[cc_mask].max())
         avg_score = float(region_map[cc_mask].mean())
-        if avg_score < min_score:
+        if max_score < min_score:
             continue
 
         cx, cy = float(centroids[label_id][0]), float(centroids[label_id][1])
@@ -108,10 +108,16 @@ def extract_components(region_map: np.ndarray, affinity_map: np.ndarray,
             scale_bin = min(num_scale_bins - 1, max(0, int(h * 1.5 / 10)))
         scale_val = scale_midpoints[scale_bin] if scale_bin < len(scale_midpoints) else h * 1.5
 
+        # Bounding box coordinates mapped from detector stride to original resolution
+        bx = max(0, x * stride - 1)
+        by = max(0, y * stride - 1)
+        bw = max(4, w * stride)
+        bh = max(6, h * stride + 1)
+
         comp = TextComponent(
             id=label_id,
             center=(cx * stride, cy * stride),
-            bbox=(x * stride, y * stride, w * stride, h * stride),
+            bbox=(bx, by, bw, bh),
             area=area,
             orientation_deg=orient_deg,
             orientation_bin=orient_bin,

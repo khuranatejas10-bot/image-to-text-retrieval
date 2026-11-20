@@ -30,10 +30,13 @@ Thumbs.db
 *.pth
 *.onnx
 /runs/
+!/runs/**/evaluation_results.json
 
 # Datasets and cache (anchored to root only)
 /data/
 /reports/
+!/reports/**/evaluation_results.json
+!/reports/*.md
 /.pytest_cache/
 
 # Ensure source package data directory is tracked

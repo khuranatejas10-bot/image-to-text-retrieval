@@ -154,9 +154,9 @@ def main():
         page_metrics["id"] = s["id"]
         all_metrics.append(page_metrics)
 
-        for k in ["cer", "wer", "tbrl"]:
+        for k in ["cer", "wer", "tbrl", "word_f1", "mean_iou"]:
             if k in page_metrics:
-                agg[k].append(page_metrics[k])
+                agg.setdefault(k, []).append(page_metrics[k])
 
     # ── Aggregate ──────────────────────────────────────────────────────────
     summary = {k: float(np.mean(v)) for k, v in agg.items() if v}

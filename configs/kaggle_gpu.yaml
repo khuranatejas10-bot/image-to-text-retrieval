@@ -21,10 +21,10 @@ detector:
   max_iterations: 3000
   batch_size: 8
   image_size: 512
-  region_threshold: 0.4
-  affinity_threshold: 0.4
-  min_component_area: 10
-  min_component_score: 0.3
+  region_threshold: 0.30
+  affinity_threshold: 0.25
+  min_component_area: 4
+  min_component_score: 0.20
   delaunay_epsilon: 2.0
   max_poly_degree: 4
   line_deviation_scale_factor: 0.25
@@ -58,5 +58,6 @@ diffusion_sr:
   ddim_steps: 10
   use_ddim: true
   recon_weight: 1.0
+  enhancement_confidence_threshold: 0.15
   max_iterations: 3000
   batch_size: 32

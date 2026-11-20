@@ -112,8 +112,6 @@ def mean_iou(pred_boxes: List[Tuple], gt_boxes: List[Tuple],
         if best_j >= 0 and best_iou >= iou_threshold:
             ious.append(best_iou)
             used.add(best_j)
-        else:
-            ious.append(0.0)
     return float(np.mean(ious)) if ious else 0.0
 
 

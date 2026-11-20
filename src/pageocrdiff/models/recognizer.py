@@ -111,18 +111,74 @@ class CTCRecognizer(nn.Module):
         Returns:
             list of lists of class indices (without blank/repeats).
         """
-        # (T, B)
-        preds = logits.argmax(dim=2)
+        preds = logits.argmax(dim=2)  # (T, B)
         batch_results = []
         for b in range(preds.shape[1]):
             seq = preds[:, b].tolist()
             decoded = []
             prev = -1
             for idx in seq:
-                if idx != self.num_classes - 1 and idx != 0 and idx != prev:
+                if idx != 0 and idx != prev:
                     decoded.append(idx)
                 prev = idx
             batch_results.append(decoded)
+        return batch_results
+
+    def decode_beam_search(self, logits: torch.Tensor, beam_width: int = 10) -> list:
+        """
+        Prefix beam search decoding for CTC.
+        Args:
+            logits: (T, B, num_classes)
+            beam_width: number of top hypotheses to maintain
+        Returns:
+            list of lists of class indices
+        """
+        import numpy as np
+        log_probs = torch.log_softmax(logits, dim=-1).detach().cpu().numpy()  # (T, B, C)
+        T, B, C = log_probs.shape
+        batch_results = []
+
+        for b in range(B):
+            beams = {(): (0.0, -float('inf'))}
+            for t in range(T):
+                step_probs = log_probs[t, b]
+                new_beams = {}
+                top_indices = np.argsort(step_probs)[-min(beam_width * 2, C):]
+
+                for prefix, (p_b, p_nb) in beams.items():
+                    p_tot = np.logaddexp(p_b, p_nb)
+                    # Extend with blank (index 0)
+                    prob_blank = float(step_probs[0])
+                    cur_b, cur_nb = new_beams.get(prefix, (-float('inf'), -float('inf')))
+                    new_beams[prefix] = (np.logaddexp(cur_b, p_tot + prob_blank), cur_nb)
+
+                    # Extend with non-blank
+                    for c in top_indices:
+                        if c == 0:
+                            continue
+                        prob_c = float(step_probs[c])
+                        if prefix and prefix[-1] == c:
+                            new_p = prefix + (int(c),)
+                            cur_b, cur_nb = new_beams.get(new_p, (-float('inf'), -float('inf')))
+                            new_beams[new_p] = (cur_b, np.logaddexp(cur_nb, p_b + prob_c))
+
+                            cur_b, cur_nb = new_beams.get(prefix, (-float('inf'), -float('inf')))
+                            new_beams[prefix] = (cur_b, np.logaddexp(cur_nb, p_nb + prob_c))
+                        else:
+                            new_p = prefix + (int(c),)
+                            cur_b, cur_nb = new_beams.get(new_p, (-float('inf'), -float('inf')))
+                            new_beams[new_p] = (cur_b, np.logaddexp(cur_nb, p_tot + prob_c))
+
+                sorted_beams = sorted(
+                    new_beams.items(),
+                    key=lambda item: np.logaddexp(item[1][0], item[1][1]),
+                    reverse=True
+                )
+                beams = dict(sorted_beams[:beam_width])
+
+            best = max(beams.keys(), key=lambda p: np.logaddexp(beams[p][0], beams[p][1])) if beams else ()
+            batch_results.append(list(best))
+
         return batch_results
 
 

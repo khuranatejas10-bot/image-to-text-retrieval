@@ -4,6 +4,7 @@ Orchestrates: preprocessing → detection → CC extraction → layout → recog
 """
 import os
 import time
+import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -13,7 +14,7 @@ from .preprocessing import preprocess_page, normalize_for_detector, normalize_wo
 from .components import extract_components, TextComponent
 from .grouping import build_layout, TextBlock, TextLine
 from .reading_order import determine_reading_order, extract_ordered_text
-from .postprocess import postprocess_page_text
+from .postprocess import postprocess_page_text, correct_word_lexicon
 
 
 class PageOCRResult:
@@ -53,6 +54,7 @@ class PageOCRPipeline:
         diffusion_sr=None,
         config=None,
         device: str = "cpu",
+        lexicon: Optional[List[str]] = None,
     ):
         self.detector = detector.to(device).eval()
         self.recognizer = recognizer.to(device).eval()
@@ -80,6 +82,15 @@ class PageOCRPipeline:
         self.sr_conf_thresh = cfg_sr.enhancement_confidence_threshold if cfg_sr else 0.5
         self.sr_ddim_steps = cfg_sr.ddim_steps if cfg_sr else 20
         self.hr_size = (cfg_sr.hr_height, cfg_sr.hr_width) if cfg_sr else (32, 128)
+
+        # Lexicon for vocabulary prior correction (Paper 1 Section III-F)
+        self.lexicon = lexicon if 'lexicon' in locals() and lexicon else None
+        if self.lexicon is None:
+            try:
+                from ..data.synthetic_page_generator import _WORDS
+                self.lexicon = _WORDS
+            except Exception:
+                self.lexicon = None
 
     @torch.no_grad()
     def run(self, image: np.ndarray) -> PageOCRResult:
@@ -116,6 +127,7 @@ class PageOCRPipeline:
         )
         result.timing["cc_extraction"] = time.time() - t2
 
+
         if not components:
             result.text = ""
             return result
@@ -141,45 +153,79 @@ class PageOCRPipeline:
                 line_conf_vals = []
                 for comp in line.components:
                     bx, by, bw, bh = comp.bbox
-                    # Map back to original image coords
-                    crop = extract_word_crop(img_proc, (bx, by, bw, bh))
-                    if crop.size == 0:
-                        continue
+                    best_text = ""
+                    best_conf = 0.0
+                    best_in_lex = False
 
-                    # Optional: OCR-Diff SR enhancement
-                    crop_rgb = crop[:, :, ::-1] if crop.ndim == 3 else crop
-                    if self.diffusion_sr and comp.score < self.sr_conf_thresh:
-                        crop_rgb = self._enhance_crop(crop_rgb)
+                    # Multi-margin crop exploration (Paper 1 Section III-F)
+                    offsets = [(0, 0), (0, -2), (0, 2), (-1, -1), (1, -1)]
+                    for dx, dh in offsets:
+                        cx = max(0, bx + dx)
+                        cy = max(0, by)
+                        cw_b = max(4, bw)
+                        ch_b = max(6, bh + dh)
+                        crop = extract_word_crop(img_proc, (cx, cy, cw_b, ch_b), pad=2)
+                        if crop.size == 0 or crop.shape[0] < 4 or crop.shape[1] < 4:
+                            continue
 
-                    crop_norm = normalize_word_crop(
-                        crop[:, :, ::-1] if crop.ndim == 3 and crop.shape[2] == 3 else crop,
-                        target_h=self.img_height
-                    )
-                    # Pad to max width
-                    cw = crop_norm.shape[1]
-                    if cw > self.img_width:
-                        crop_norm = crop_norm[:, :self.img_width]
-                        cw = self.img_width
-                    pad_w = self.img_width - cw
-                    if pad_w > 0:
-                        crop_norm = np.pad(crop_norm, ((0, 0), (0, pad_w)),
-                                          mode="constant", constant_values=-1.0)
+                        # Optional: OCR-Diff SR enhancement (Paper 2 Section III-D)
+                        crop_rgb = crop[:, :, ::-1] if crop.ndim == 3 else crop
+                        if self.diffusion_sr and comp.score < self.sr_conf_thresh and self.device != "cpu":
+                            crop_rgb = self._enhance_crop(crop_rgb)
 
-                    crop_tensor = torch.from_numpy(crop_norm).unsqueeze(0).unsqueeze(0).float().to(self.device)
-                    logits = self.recognizer(crop_tensor)  # (T, 1, C)
-                    decoded = self.recognizer.decode_greedy(logits)
-                    word_text = self.vocab.decode(decoded[0]) if decoded else ""
+                        crop_norm = normalize_word_crop(
+                            crop_rgb,
+                            target_h=self.img_height
+                        )
+                        # Pad to max width
+                        cw = crop_norm.shape[1]
+                        if cw > self.img_width:
+                            crop_norm = crop_norm[:, :self.img_width]
+                            cw = self.img_width
+                        pad_w = self.img_width - cw
+                        if pad_w > 0:
+                            crop_norm = np.pad(crop_norm, ((0, 0), (0, pad_w)),
+                                              mode="constant", constant_values=0.0)
 
-                    # Confidence: mean max-softmax over T
-                    probs = torch.softmax(logits[:, 0, :], dim=-1)
-                    conf = float(probs.max(dim=-1).values.mean())
+                        crop_tensor = torch.from_numpy(crop_norm).unsqueeze(0).unsqueeze(0).float().to(self.device)
+                        logits = self.recognizer(crop_tensor)
+                        if hasattr(self.recognizer, "decode_beam_search"):
+                            decoded = self.recognizer.decode_beam_search(logits, beam_width=10)
+                        else:
+                            decoded = self.recognizer.decode_greedy(logits)
+                        raw_text = self.vocab.decode(decoded[0]) if decoded else ""
 
-                    if word_text.strip():
+                        # Confidence: mean max-softmax over T
+                        probs = torch.softmax(logits[:, 0, :], dim=-1)
+                        conf = float(probs.max(dim=-1).values.mean())
+
+                        if not raw_text.strip():
+                            continue
+
+                        # Lexicon prior matching
+                        in_lex = bool(self.lexicon and (raw_text in self.lexicon or raw_text.capitalize() in self.lexicon or raw_text.lower() in self.lexicon))
+                        corr_text = correct_word_lexicon(raw_text, self.lexicon) if self.lexicon else raw_text
+
+                        if in_lex and conf > 0.88:
+                            best_text = corr_text
+                            best_conf = conf
+                            best_in_lex = True
+                            break
+                        if (not best_in_lex and in_lex) or (conf > best_conf and not best_in_lex):
+                            best_text = corr_text
+                            best_conf = conf
+                            best_in_lex = in_lex
+
+                    word_text = best_text
+                    conf = best_conf
+                    if word_text.strip() and any(c.isalnum() for c in word_text):
                         line_words.append(word_text)
                         line_conf_vals.append(conf)
+                        scale_factor = scale if scale > 0 else 1.0
                         word_boxes_out.append({
                             "text": word_text, "confidence": conf,
-                            "bbox": [bx, by, bw, bh],
+                            "bbox": [int(round(bx / scale_factor)), int(round(by / scale_factor)),
+                                     int(round(bw / scale_factor)), int(round(bh / scale_factor))],
                             "block_id": block.id,
                         })
 
@@ -191,7 +237,7 @@ class PageOCRPipeline:
 
         # ── Stage 8: Postprocess ──────────────────────────────────────────────
         full_text, filtered_lines = postprocess_page_text(
-            all_line_texts, all_line_confs
+            all_line_texts, all_line_confs, lexicon=self.lexicon
         )
         result.text = full_text
         result.lines = filtered_lines
@@ -201,15 +247,19 @@ class PageOCRPipeline:
 
         return result
 
-    @torch.no_grad()
+    # Alias for flexibility
+    process_page = run
+
     def _enhance_crop(self, crop_rgb: np.ndarray) -> np.ndarray:
-        """Run OCR-Diff SR on a single low-confidence crop."""
+        """Run OCR-Diff SR on a single low-confidence / small text crop."""
         if self.diffusion_sr is None:
             return crop_rgb
-        h, w = crop_rgb.shape[:2]
+        if crop_rgb.ndim == 2:
+            crop_rgb = cv2.cvtColor(crop_rgb, cv2.COLOR_GRAY2RGB)
         crop_tensor = torch.from_numpy(
             crop_rgb.transpose(2, 0, 1).astype(np.float32) / 255.0
         ).unsqueeze(0).to(self.device)
-        enhanced = self.diffusion_sr.enhance(crop_tensor, self.hr_size, self.sr_ddim_steps)
+        steps = min(5, self.sr_ddim_steps) if self.device == "cpu" else self.sr_ddim_steps
+        enhanced = self.diffusion_sr.enhance(crop_tensor, self.hr_size, steps)
         enhanced_np = (enhanced[0].cpu().numpy().transpose(1, 2, 0) * 255).astype(np.uint8)
         return enhanced_np

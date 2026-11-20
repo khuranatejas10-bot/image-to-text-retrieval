@@ -49,22 +49,17 @@ def preprocess_page(
     if do_deskew:
         img, _ = correct_skew(img, max_angle_deg=10.0)
 
-    # ── 5. Resize to target_size (longest side) ──
+    # ── 5. Resize to target_size (longest side) only if larger ──
     h, w = img.shape[:2]
     if target_size and max(h, w) > target_size:
         scale = target_size / max(h, w)
         new_w = int(w * scale)
         new_h = int(h * scale)
         img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-    elif target_size and max(h, w) < target_size:
-        scale = target_size / max(h, w)
-        new_w = min(target_size, int(w * scale))
-        new_h = min(target_size, int(h * scale))
-        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
     else:
         scale = 1.0
 
-    actual_scale = img.shape[1] / original_w  # Only use width scale for callers
+    actual_scale = img.shape[1] / original_w
 
     # ── 6. Pad to be divisible by 32 (required by detector backbone) ──
     ph = img.shape[0]
@@ -141,7 +136,7 @@ def normalize_word_crop(crop: np.ndarray, target_h: int = 32) -> np.ndarray:
 
 
 def extract_word_crop(image: np.ndarray, bbox: Tuple[int, int, int, int],
-                      pad: int = 2) -> np.ndarray:
+                      pad: int = 0) -> np.ndarray:
     """Crop a word region from the page image with optional padding."""
     h, w = image.shape[:2]
     x, y, bw, bh = bbox
